@@ -10,6 +10,8 @@ The PRD lives in `uptime-pinger-prd.md` — consult it for detailed API routes, 
 
 ## Build & Run Commands
 
+Go module: `PingGoat` (used in import paths, e.g., `PingGoat/internal/pinger`)
+
 ```bash
 go build -o pinggoat ./cmd/api       # Build API server
 go build -o pinggoat-cli ./cmd/cli   # Build CLI client
