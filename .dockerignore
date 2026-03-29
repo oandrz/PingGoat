@@ -1,0 +1,10 @@
+.git
+.idea
+*.iml
+.env
+Dockerfile
+docker-compose.yml
+CLAUDE.md
+README.md
+prd.md
+instruction/

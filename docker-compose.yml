@@ -1,0 +1,38 @@
+services:
+  # --- PostgreSQL Database ---
+  db:
+    image: postgres:16-alpine     # Use official Postgres image
+    environment:
+      POSTGRES_USER: pinggoat
+      POSTGRES_PASSWORD: pinggoat
+      POSTGRES_DB: pinggoat
+    ports:
+      - "5432:5432"               # host:container — lets you connect from your Mac
+    volumes:
+      - pgdata:/var/lib/postgresql/data   # Persist data across restarts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pinggoat"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+
+  # --- PingGoat API Server ---
+  api:
+    build: .                      # Build from the Dockerfile in current directory
+    ports:
+      - "8080:8080"               # host:container
+    environment:
+      DATABASE_URL: postgres://pinggoat:pinggoat@db:5432/pinggoat?sslmode=disable
+      JWT_SECRET: dev-secret-change-in-prod
+      API_PORT: "8080"
+      PINGER_WORKERS: "4"
+      PINGER_SCAN_INTERVAL_SECONDS: "5"
+      PINGER_DEFAULT_CHECK_INTERVAL_SECONDS: "60"
+      PINGER_HTTP_TIMEOUT_SECONDS: "10"
+    depends_on:
+      db:
+        condition: service_healthy  # Wait for Postgres to be ready, not just started
+
+# Named volume — Docker manages the storage location
+volumes:
+  pgdata:
