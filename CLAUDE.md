@@ -8,21 +8,21 @@ You are also a great mentor that has helped many others learn Go and create scal
 
 ## Project Overview
 
-PingGoat is an uptime monitoring service built in Go (boot.dev capstone project). Users register HTTP endpoints to monitor, and a concurrent worker pool pings them on schedule, recording response times, status codes, and generating alerts on status changes. Accessed via REST API and a CLI client (`pinggoat`).
+DocGoat is an AI-powered GitHub documentation generator built in Go (boot.dev capstone project). Users submit a GitHub repository URL, and the service clones the repo, intelligently selects and parses key files, batches them into Gemini Flash calls (respecting free-tier rate limits), and generates comprehensive documentation — a polished README, quickstart guide, and Mermaid architecture diagram. Results are stored in PostgreSQL for retrieval and regeneration. Accessed via REST API + CLI client (`docgoat`).
 
-The PRD lives in `uptime-pinger-prd.md` — consult it for detailed API routes, data model, user stories, and CLI spec.
+The PRD lives in `prd.md` — consult it for detailed API routes, data model, user stories, and CLI spec.
 
 ## Build & Run Commands
 
-Go module: `PingGoat` (used in import paths, e.g., `PingGoat/internal/pinger`)
+Go module: `PingGoat` (used in import paths, e.g., `PingGoat/internal/pipeline`)
 
 ```bash
-go build -o pinggoat ./cmd/api       # Build API server
-go build -o pinggoat-cli ./cmd/cli   # Build CLI client
+go build -o docgoat ./cmd/api        # Build API server
+go build -o docgoat-cli ./cmd/cli    # Build CLI client
 go run ./cmd/api                     # Run API server
 go test ./...                        # Run all tests
-go test ./internal/pinger/...        # Run tests for a single package
-go test -run TestScheduler ./internal/pinger/...  # Run a single test
+go test ./internal/pipeline/...      # Run tests for a single package
+go test -run TestWorker ./internal/pipeline/...  # Run a single test
 ```
 
 Once infrastructure is set up:
@@ -36,22 +36,26 @@ sqlc generate                        # Regenerate query code
 
 **Two entrypoints:** `cmd/api/` (HTTP server) and `cmd/cli/` (Cobra CLI client).
 
-**Core concurrency model** (the main Go showcase — in `internal/pinger/`):
-- **Scheduler** (1 goroutine): ticks every 5s, queries DB for endpoints due for a check, sends them to a buffered jobs channel
-- **Worker pool** (N goroutines): reads from jobs channel, makes HTTP requests with per-check context timeout (10s default)
-- **Result writer** (1 goroutine): reads from results channel, batch-inserts check results, detects status changes to generate alerts
+**Core pipeline** (the main Go showcase — in `internal/pipeline/`):
+1. **Clone** — git clone to temp dir, resolve HEAD commit SHA
+2. **Parse** (concurrent) — fan-out N goroutines to walk file tree, filter, read, and classify files
+3. **Batch** — group parsed files into prompt-sized batches (< 50K tokens each)
+4. **Generate** (rate-limited) — send batched prompts to Gemini, generate README/quickstart/diagram
+5. **Store** — save results to `documents` table, update `doc_cache`, mark job completed
 
-Fan-out/fan-in via buffered channels. Graceful shutdown uses `sync.WaitGroup` + `context.Context`.
+Async job queue via buffered channel. Rate limiter (`time.Ticker`) ensures ≤ 10 RPM to Gemini. Graceful shutdown uses `sync.WaitGroup` + `context.Context`.
 
 **Key packages** (planned under `internal/`):
 - `auth` — JWT generation/validation, bcrypt password hashing
 - `database` — sqlc-generated code + DB connection
-- `handler` — HTTP handlers for endpoints, checks, alerts, auth
+- `handler` — HTTP handlers for auth, jobs, docs
 - `middleware` — Auth middleware, request logging
-- `pinger` — Worker pool, scheduler, HTTP checker
+- `pipeline` — Cloner, scanner, parser, batcher, generator, worker
+- `gemini` — Gemini client wrapper + rate limiter
+- `github` — GitHub auth + repo validation
 - `config` — App configuration from env vars
 
-**Data layer:** PostgreSQL with Goose migrations (`sql/schema/`) and sqlc queries (`sql/queries/`). Four tables: `users`, `endpoints`, `checks`, `alerts`.
+**Data layer:** PostgreSQL with Goose migrations (`sql/schema/`) and sqlc queries (`sql/queries/`). Four tables: `users`, `jobs`, `documents`, `doc_cache`.
 
 ## Tech Stack
 
@@ -63,9 +67,10 @@ Fan-out/fan-in via buffered channels. Graceful shutdown uses `sync.WaitGroup` + 
 
 ## Configuration
 
-Env vars (see PRD section 11): `DATABASE_URL`, `JWT_SECRET`, `API_PORT`, `PINGER_WORKERS`, `PINGER_SCAN_INTERVAL_SECONDS`, `PINGER_DEFAULT_CHECK_INTERVAL_SECONDS`, `PINGER_HTTP_TIMEOUT_SECONDS`.
+Env vars (see PRD section 14): `DATABASE_URL`, `JWT_SECRET`, `API_PORT`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_RPM_LIMIT`, `GEMINI_RPD_LIMIT`, `GEMINI_TIMEOUT_SECONDS`, `PIPELINE_WORKERS`, `PIPELINE_MAX_FILES_PER_REPO`, `PIPELINE_MAX_FILE_LINES`, `PIPELINE_CLONE_TIMEOUT_SECONDS`, `PIPELINE_MAX_GEMINI_CALLS_PER_JOB`, `GITHUB_TOKEN_ENCRYPTION_KEY`.
 
 ## GOTCHAS
+- Always update @CLAUDE.md if you are adding new features or fixing bugs and learned something from the process.
 - **IMPORTANT:** `Update the instruction/ directory every time human software engineer asks you about how to do something. 
 If the docs is not available feel free to create a new one. For every topic we can create new .md file. 
 Notes: when creating docs it would be great if you are using language that easy to understand, straightforward and concise. Explains the why behind your suggestion or solution as well.
