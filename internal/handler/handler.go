@@ -12,6 +12,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const pgUniqueViolation = "23505"
+
 type authHandler struct {
 	queries   *database.Queries
 	jwtSecret string
@@ -41,26 +43,23 @@ func (h *authHandler) Register(w http.ResponseWriter, r *http.Request) {
 		CreatedAt string `json:"created_at"`
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
+
 	var params requestParameter
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-		RespondWithJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "invalid JSON body",
-		})
+		RespondWithError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
 	if params.Email == "" || params.Password == "" {
-		RespondWithJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "email and password are required",
-		})
+		RespondWithError(w, http.StatusBadRequest, "email and password are required")
 		return
 	}
 
 	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(params.Password), bcrypt.DefaultCost)
 	if err != nil {
-		RespondWithJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to hash password",
-		})
+		log.Printf("failed to hash password: %v", err)
+		RespondWithError(w, http.StatusInternalServerError, "failed to hash password")
 		return
 	}
 
@@ -70,20 +69,13 @@ func (h *authHandler) Register(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
-		errors.As(err, &pgErr)
-
-		if pgErr != nil && pgErr.Code == "23505" {
-			RespondWithJSON(w, http.StatusConflict, map[string]string{
-				"error": "email already in use",
-			})
+		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
+			RespondWithError(w, http.StatusConflict, "email already in use")
 			return
 		}
 
-		log.Printf("failed to create user: %s", err)
-		RespondWithJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to create user",
-		})
-
+		log.Printf("failed to create user: %v", err)
+		RespondWithError(w, http.StatusInternalServerError, "failed to create user")
 		return
 	}
 

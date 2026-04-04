@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,7 +16,10 @@ import (
 func main() {
 	cfg := config.Load()
 
-	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		panic(fmt.Errorf("failed to connect to database: %w", err))
 	}
