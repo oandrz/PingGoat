@@ -8,15 +8,21 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const pgUniqueViolation = "23505"
 
+// Pre-computed dummy hash for timing-safe login (prevents timing side-channel on user-not-found path)
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy-password"), bcrypt.DefaultCost)
+
 type authHandler struct {
-	queries   *database.Queries
-	jwtSecret string
+	queries        *database.Queries
+	jwtSecret      string
+	jwtExpiryHours int
 }
 
 type AuthHandler interface {
@@ -24,10 +30,11 @@ type AuthHandler interface {
 	Login(w http.ResponseWriter, r *http.Request)
 }
 
-func NewAuthHandler(queries *database.Queries, jwtSecret string) AuthHandler {
+func NewAuthHandler(queries *database.Queries, jwtSecret string, jwtExpiryHours int) AuthHandler {
 	return &authHandler{
-		queries:   queries,
-		jwtSecret: jwtSecret,
+		queries:        queries,
+		jwtSecret:      jwtSecret,
+		jwtExpiryHours: jwtExpiryHours,
 	}
 }
 
@@ -87,7 +94,68 @@ func (h *authHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *authHandler) Login(w http.ResponseWriter, r *http.Request) {
-	RespondWithJSON(w, http.StatusOK, map[string]string{
-		"message": "Hello, world!",
+	type requestParameter struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	type response struct {
+		ID        string `json:"id"`
+		Email     string `json:"email"`
+		CreatedAt string `json:"created_at"`
+		JWTToken  string `json:"jwt_token"`
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var param requestParameter
+	if err := json.NewDecoder(r.Body).Decode(&param); err != nil {
+		RespondWithError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if param.Email == "" || param.Password == "" {
+		RespondWithError(w, http.StatusBadRequest, "email and password are required")
+		return
+	}
+
+	user, err := h.queries.GetUserByEmail(r.Context(), param.Email)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// User not found — run dummy bcrypt to match timing of the real path
+			_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(param.Password))
+			RespondWithError(w, http.StatusUnauthorized, "invalid email or password")
+			return
+		}
+
+		log.Printf("database error during login: %v", err)
+		RespondWithError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(param.Password)); err != nil {
+		// intended the same with the password one to reduce the chance of attacker go into the app
+		RespondWithError(w, http.StatusUnauthorized, "invalid email or password")
+		return
+	}
+
+	claims := jwt.RegisteredClaims{
+		Subject:   user.ID.String(),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(h.jwtExpiryHours) * time.Hour)),
+	}
+	unsignedToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := unsignedToken.SignedString([]byte(h.jwtSecret))
+	if err != nil {
+		log.Printf("failed to sign token: %v", err)
+		RespondWithError(w, http.StatusInternalServerError, "failed to sign token")
+		return
+	}
+
+	RespondWithJSON(w, http.StatusOK, response{
+		ID:        user.ID.String(),
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
+		JWTToken:  signedToken,
 	})
 }

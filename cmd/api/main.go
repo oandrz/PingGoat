@@ -27,7 +27,7 @@ func main() {
 
 	dbQueries := database.New(pool)
 
-	authHandler := handler.NewAuthHandler(dbQueries, cfg.JWTSecret)
+	authHandler := handler.NewAuthHandler(dbQueries, cfg.JWTSecret, cfg.JWTExpiryHours)
 
 	r := chi.NewRouter()
 	/**
