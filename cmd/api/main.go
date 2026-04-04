@@ -40,6 +40,7 @@ func main() {
 	r.Post("/api/v1/auth/register", authHandler.Register)
 	r.Post("/api/v1/auth/login", authHandler.Login)
 
+	fmt.Printf("Server starting on port %s\n", cfg.APIPort)
 	err = http.ListenAndServe(":"+cfg.APIPort, r)
 	if err != nil {
 		panic(fmt.Errorf("failed to start server: %w", err))
