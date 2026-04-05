@@ -2,6 +2,7 @@ package handler
 
 import (
 	"PingGoat/internal/database"
+	"PingGoat/internal/httputil"
 	"encoding/json"
 	"errors"
 	"log"
@@ -28,6 +29,7 @@ type authHandler struct {
 type AuthHandler interface {
 	Register(w http.ResponseWriter, r *http.Request)
 	Login(w http.ResponseWriter, r *http.Request)
+	App(w http.ResponseWriter, r *http.Request)
 }
 
 func NewAuthHandler(queries *database.Queries, jwtSecret string, jwtExpiryHours int) AuthHandler {
@@ -54,19 +56,19 @@ func (h *authHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	var params requestParameter
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-		RespondWithError(w, http.StatusBadRequest, "invalid JSON body")
+		httputil.RespondWithError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
 	if params.Email == "" || params.Password == "" {
-		RespondWithError(w, http.StatusBadRequest, "email and password are required")
+		httputil.RespondWithError(w, http.StatusBadRequest, "email and password are required")
 		return
 	}
 
 	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(params.Password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Printf("failed to hash password: %v", err)
-		RespondWithError(w, http.StatusInternalServerError, "failed to hash password")
+		httputil.RespondWithError(w, http.StatusInternalServerError, "failed to hash password")
 		return
 	}
 
@@ -77,16 +79,16 @@ func (h *authHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
-			RespondWithError(w, http.StatusConflict, "email already in use")
+			httputil.RespondWithError(w, http.StatusConflict, "email already in use")
 			return
 		}
 
 		log.Printf("failed to create user: %v", err)
-		RespondWithError(w, http.StatusInternalServerError, "failed to create user")
+		httputil.RespondWithError(w, http.StatusInternalServerError, "failed to create user")
 		return
 	}
 
-	RespondWithJSON(w, http.StatusCreated, response{
+	httputil.RespondWithJSON(w, http.StatusCreated, response{
 		ID:        user.ID.String(),
 		Email:     user.Email,
 		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
@@ -110,12 +112,12 @@ func (h *authHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	var param requestParameter
 	if err := json.NewDecoder(r.Body).Decode(&param); err != nil {
-		RespondWithError(w, http.StatusBadRequest, "invalid JSON body")
+		httputil.RespondWithError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
 	if param.Email == "" || param.Password == "" {
-		RespondWithError(w, http.StatusBadRequest, "email and password are required")
+		httputil.RespondWithError(w, http.StatusBadRequest, "email and password are required")
 		return
 	}
 
@@ -124,18 +126,18 @@ func (h *authHandler) Login(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// User not found — run dummy bcrypt to match timing of the real path
 			_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(param.Password))
-			RespondWithError(w, http.StatusUnauthorized, "invalid email or password")
+			httputil.RespondWithError(w, http.StatusUnauthorized, "invalid email or password")
 			return
 		}
 
 		log.Printf("database error during login: %v", err)
-		RespondWithError(w, http.StatusInternalServerError, "internal server error")
+		httputil.RespondWithError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(param.Password)); err != nil {
 		// intended the same with the password one to reduce the chance of attacker go into the app
-		RespondWithError(w, http.StatusUnauthorized, "invalid email or password")
+		httputil.RespondWithError(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
 
@@ -148,14 +150,18 @@ func (h *authHandler) Login(w http.ResponseWriter, r *http.Request) {
 	signedToken, err := unsignedToken.SignedString([]byte(h.jwtSecret))
 	if err != nil {
 		log.Printf("failed to sign token: %v", err)
-		RespondWithError(w, http.StatusInternalServerError, "failed to sign token")
+		httputil.RespondWithError(w, http.StatusInternalServerError, "failed to sign token")
 		return
 	}
 
-	RespondWithJSON(w, http.StatusOK, response{
+	httputil.RespondWithJSON(w, http.StatusOK, response{
 		ID:        user.ID.String(),
 		Email:     user.Email,
 		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
 		JWTToken:  signedToken,
 	})
+}
+
+func (h *authHandler) App(w http.ResponseWriter, r *http.Request) {
+	httputil.RespondWithJSON(w, http.StatusOK, map[string]string{"message": "Hello, world!"})
 }

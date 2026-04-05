@@ -33,6 +33,9 @@ goose -dir sql/schema postgres "$DATABASE_URL" up   # Run migrations
 sqlc generate                        # Regenerate query code
 ```
 
+## OUTPUT
+- Use Output for learning
+
 ## Architecture
 
 **Two entrypoints:** `cmd/api/` (HTTP server) and `cmd/cli/` (Cobra CLI client).

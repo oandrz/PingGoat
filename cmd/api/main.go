@@ -4,8 +4,10 @@ import (
 	"PingGoat/internal/config"
 	"PingGoat/internal/database"
 	"PingGoat/internal/handler"
+	"PingGoat/internal/middleware"
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -44,9 +46,11 @@ func main() {
 	r.Post("/api/v1/auth/register", authHandler.Register)
 	r.Post("/api/v1/auth/login", authHandler.Login)
 
-	fmt.Printf("Server starting on port %s\n", cfg.APIPort)
-	err = http.ListenAndServe(":"+cfg.APIPort, r)
-	if err != nil {
-		panic(fmt.Errorf("failed to start server: %w", err))
-	}
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.JWTAuth(cfg.JWTSecret))
+		r.Get("/api/v1/home", authHandler.App)
+	})
+
+	log.Printf("Serving on: http://localhost:%s/app/\n", cfg.APIPort)
+	log.Fatal(http.ListenAndServe(":"+cfg.APIPort, r))
 }
