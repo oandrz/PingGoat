@@ -30,6 +30,7 @@ func main() {
 	dbQueries := database.New(pool)
 
 	authHandler := handler.NewAuthHandler(dbQueries, cfg.JWTSecret, cfg.JWTExpiryHours)
+	jobsHandler := handler.NewJobsHandler(dbQueries)
 
 	r := chi.NewRouter()
 	/**
@@ -49,6 +50,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.JWTAuth(cfg.JWTSecret))
 		r.Get("/api/v1/home", authHandler.App)
+		r.Post("/api/v1/jobs", jobsHandler.SubmitJob)
 	})
 
 	log.Printf("Serving on: http://localhost:%s/app/\n", cfg.APIPort)
