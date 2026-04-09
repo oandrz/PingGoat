@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countJobsByUser = `-- name: CountJobsByUser :one
+SELECT COUNT(*) FROM jobs WHERE user_id = $1
+`
+
+func (q *Queries) CountJobsByUser(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countJobsByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createJob = `-- name: CreateJob :one
 INSERT INTO jobs (user_id, repo_url, branch)
 VALUES ($1, $2, $3)
@@ -42,4 +53,76 @@ func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, erro
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getJob = `-- name: GetJob :one
+SELECT id, user_id, repo_url, branch, commit_sha, status, error_message, file_count, gemini_calls_used, started_at, completed_at, created_at, updated_at FROM jobs WHERE id = $1
+`
+
+func (q *Queries) GetJob(ctx context.Context, id pgtype.UUID) (Job, error) {
+	row := q.db.QueryRow(ctx, getJob, id)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RepoUrl,
+		&i.Branch,
+		&i.CommitSha,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.FileCount,
+		&i.GeminiCallsUsed,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listJobsByUser = `-- name: ListJobsByUser :many
+SELECT id, user_id, repo_url, branch, commit_sha, status, error_message, file_count, gemini_calls_used, started_at, completed_at, created_at, updated_at FROM jobs
+WHERE user_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListJobsByUserParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Limit  int32       `json:"limit"`
+	Offset int32       `json:"offset"`
+}
+
+func (q *Queries) ListJobsByUser(ctx context.Context, arg ListJobsByUserParams) ([]Job, error) {
+	rows, err := q.db.Query(ctx, listJobsByUser, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Job{}
+	for rows.Next() {
+		var i Job
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.RepoUrl,
+			&i.Branch,
+			&i.CommitSha,
+			&i.Status,
+			&i.ErrorMessage,
+			&i.FileCount,
+			&i.GeminiCallsUsed,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

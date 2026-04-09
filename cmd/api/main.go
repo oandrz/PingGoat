@@ -51,6 +51,7 @@ func main() {
 		r.Use(middleware.JWTAuth(cfg.JWTSecret))
 		r.Get("/api/v1/home", authHandler.App)
 		r.Post("/api/v1/jobs", jobsHandler.SubmitJob)
+		r.Get("/api/v1/jobs", jobsHandler.ListJobs)
 	})
 
 	log.Printf("Serving on: http://localhost:%s/app/\n", cfg.APIPort)
