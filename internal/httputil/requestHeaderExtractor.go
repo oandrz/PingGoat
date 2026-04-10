@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func GetUserId(r *http.Request, pgUUID *pgtype.UUID, key any) error {
+func GetUserID(r *http.Request, pgUUID *pgtype.UUID, key any) error {
 	userID, ok := r.Context().Value(key).(string)
 	if !ok {
 		log.Printf("User not found in system")

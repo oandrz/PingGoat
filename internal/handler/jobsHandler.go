@@ -70,7 +70,7 @@ func (h *jobsHandler) SubmitJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var pgUUID pgtype.UUID
-	err := httputil.GetUserId(r, &pgUUID, middleware.UserIDKey)
+	err := httputil.GetUserID(r, &pgUUID, middleware.UserIDKey)
 	if err != nil {
 		httputil.RespondWithError(w, http.StatusUnauthorized, "Invalid User")
 		return
@@ -86,7 +86,7 @@ func (h *jobsHandler) SubmitJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.RespondWithJSON(w, http.StatusCreated, response{
+	httputil.RespondWithJSON(w, http.StatusAccepted, response{
 		ID:        job.ID.String(),
 		RepoUrl:   job.RepoUrl,
 		Branch:    job.Branch.String,
@@ -98,7 +98,7 @@ func (h *jobsHandler) SubmitJob(w http.ResponseWriter, r *http.Request) {
 func (h *jobsHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	type jobResponse struct {
 		ID        string `json:"id"`
-		RepoUrl   string `json:"repo_url"`
+		RepoURL   string `json:"repo_url"`
 		Branch    string `json:"branch"`
 		Status    string `json:"status"`
 		CreatedAt string `json:"created_at"`
@@ -129,7 +129,7 @@ func (h *jobsHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var pgUUID pgtype.UUID
-	err = httputil.GetUserId(r, &pgUUID, middleware.UserIDKey)
+	err = httputil.GetUserID(r, &pgUUID, middleware.UserIDKey)
 	if err != nil {
 		httputil.RespondWithError(w, http.StatusUnauthorized, "Invalid User")
 		return
@@ -143,15 +143,23 @@ func (h *jobsHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if count == 0 {
-		httputil.RespondWithJSON(w, http.StatusOK, response{})
+		httputil.RespondWithJSON(w, http.StatusOK, response{
+			Data: []jobResponse{},
+			Meta: responseMeta{Page: page, PerPage: perPage, Total: 0},
+		})
 		return
 	}
 
-	offSet := (page - 1) * perPage
+	maxPage := (int(count) + perPage - 1) / perPage
+	if page > maxPage {
+		page = maxPage
+	}
+
+	offset := (page - 1) * perPage
 	list, err := h.queries.ListJobsByUser(r.Context(), database.ListJobsByUserParams{
 		UserID: pgUUID,
 		Limit:  int32(perPage),
-		Offset: int32(offSet),
+		Offset: int32(offset),
 	})
 	if err != nil {
 		log.Printf("failed to list jobs: %v", err)
@@ -159,16 +167,11 @@ func (h *jobsHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(list) == 0 {
-		httputil.RespondWithJSON(w, http.StatusOK, response{})
-		return
-	}
-
-	var jobResponseList []jobResponse
+	jobResponseList := make([]jobResponse, 0, len(list))
 	for _, job := range list {
 		jobResponseList = append(jobResponseList, jobResponse{
 			ID:        job.ID.String(),
-			RepoUrl:   job.RepoUrl,
+			RepoURL:   job.RepoUrl,
 			Branch:    job.Branch.String,
 			Status:    job.Status,
 			CreatedAt: job.CreatedAt.Time.Format(time.RFC3339),
