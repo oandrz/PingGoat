@@ -5,12 +5,15 @@ import (
 	"PingGoat/internal/httputil"
 	"PingGoat/internal/middleware"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -24,6 +27,7 @@ type jobsHandler struct {
 type JobsHandler interface {
 	SubmitJob(w http.ResponseWriter, r *http.Request)
 	ListJobs(w http.ResponseWriter, r *http.Request)
+	GetJobById(w http.ResponseWriter, r *http.Request)
 }
 
 func NewJobsHandler(queries *database.Queries) JobsHandler {
@@ -184,5 +188,73 @@ func (h *jobsHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 			PerPage: perPage,
 			Total:   int(count),
 		},
+	})
+}
+
+func (h *jobsHandler) GetJobById(w http.ResponseWriter, r *http.Request) {
+	type response struct {
+		ID              string  `json:"id"`
+		RepoURL         string  `json:"repo_url"`
+		Branch          *string `json:"branch"`
+		Status          string  `json:"status"`
+		FileCount       int     `json:"file_count"`
+		GeminiCallsUsed int     `json:"gemini_calls_used"`
+		StartedAt       *string `json:"started_at"`
+		CompletedAt     *string `json:"completed_at"`
+		CommitSha       *string `json:"commit_sha"`
+		ErrorMessage    *string `json:"error_message"`
+		CreatedAt       string  `json:"created_at"`
+	}
+
+	var pgUUID pgtype.UUID
+	err := httputil.GetUserID(r, &pgUUID, middleware.UserIDKey)
+	if err != nil {
+		httputil.RespondWithError(w, http.StatusUnauthorized, "Invalid User")
+		return
+	}
+
+	jobId := chi.URLParam(r, "id")
+	if jobId == "" {
+		log.Printf("Job ID is required")
+		httputil.RespondWithError(w, http.StatusBadRequest, "Job ID is required")
+		return
+	}
+
+	var jobIdPgUUID pgtype.UUID
+	err = jobIdPgUUID.Scan(jobId)
+	if err != nil {
+		log.Printf("Invalid Job ID: %v", err)
+		httputil.RespondWithError(w, http.StatusBadRequest, "Invalid Job ID")
+		return
+	}
+
+	job, err := h.queries.GetJob(r.Context(), database.GetJobParams{
+		ID:     jobIdPgUUID,
+		UserID: pgUUID,
+	})
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			log.Printf("Job not found: %v", err)
+			httputil.RespondWithError(w, http.StatusNotFound, "Job not found")
+			return
+		}
+		log.Printf("failed to get job: %v", err)
+		httputil.RespondWithError(w, http.StatusInternalServerError, "Failed to get job")
+		return
+	}
+
+	httputil.RespondWithJSON(w, http.StatusOK, response{
+		ID:              job.ID.String(),
+		RepoURL:         job.RepoUrl,
+		Branch:          httputil.FormatNullableString(job.Branch),
+		Status:          job.Status,
+		FileCount:       httputil.IntFromInt4(job.FileCount),
+		GeminiCallsUsed: httputil.IntFromInt4(job.GeminiCallsUsed),
+		CommitSha:       httputil.FormatNullableString(job.CommitSha),
+		ErrorMessage:    httputil.FormatNullableString(job.ErrorMessage),
+		StartedAt:       httputil.FormatNullableTime(job.StartedAt),
+		CompletedAt:     httputil.FormatNullableTime(job.CompletedAt),
+		CreatedAt:       job.CreatedAt.Time.Format(time.RFC3339),
 	})
 }

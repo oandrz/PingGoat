@@ -56,11 +56,16 @@ func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, erro
 }
 
 const getJob = `-- name: GetJob :one
-SELECT id, user_id, repo_url, branch, commit_sha, status, error_message, file_count, gemini_calls_used, started_at, completed_at, created_at, updated_at FROM jobs WHERE id = $1
+SELECT id, user_id, repo_url, branch, commit_sha, status, error_message, file_count, gemini_calls_used, started_at, completed_at, created_at, updated_at FROM jobs WHERE id = $1 and user_id = $2
 `
 
-func (q *Queries) GetJob(ctx context.Context, id pgtype.UUID) (Job, error) {
-	row := q.db.QueryRow(ctx, getJob, id)
+type GetJobParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetJob(ctx context.Context, arg GetJobParams) (Job, error) {
+	row := q.db.QueryRow(ctx, getJob, arg.ID, arg.UserID)
 	var i Job
 	err := row.Scan(
 		&i.ID,

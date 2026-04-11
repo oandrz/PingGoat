@@ -4,7 +4,7 @@ VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: GetJob :one
-SELECT * FROM jobs WHERE id = $1;
+SELECT * FROM jobs WHERE id = $1 and user_id = $2;
 
 -- name: ListJobsByUser :many
 SELECT * FROM jobs
