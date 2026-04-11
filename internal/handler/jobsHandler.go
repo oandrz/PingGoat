@@ -28,6 +28,7 @@ type JobsHandler interface {
 	SubmitJob(w http.ResponseWriter, r *http.Request)
 	ListJobs(w http.ResponseWriter, r *http.Request)
 	GetJobById(w http.ResponseWriter, r *http.Request)
+	RemoveJobById(w http.ResponseWriter, r *http.Request)
 }
 
 func NewJobsHandler(queries *database.Queries) JobsHandler {
@@ -257,4 +258,80 @@ func (h *jobsHandler) GetJobById(w http.ResponseWriter, r *http.Request) {
 		CompletedAt:     httputil.FormatNullableTime(job.CompletedAt),
 		CreatedAt:       job.CreatedAt.Time.Format(time.RFC3339),
 	})
+}
+
+func (h *jobsHandler) RemoveJobById(w http.ResponseWriter, r *http.Request) {
+	var pgUUID pgtype.UUID
+	err := httputil.GetUserID(r, &pgUUID, middleware.UserIDKey)
+	if err != nil {
+		httputil.RespondWithError(w, http.StatusUnauthorized, "Invalid User")
+		return
+	}
+
+	jobId := chi.URLParam(r, "id")
+	if jobId == "" {
+		log.Printf("Job ID is required")
+		httputil.RespondWithError(w, http.StatusBadRequest, "Job ID is required")
+		return
+	}
+
+	var jobIdPgUUID pgtype.UUID
+	err = jobIdPgUUID.Scan(jobId)
+	if err != nil {
+		log.Printf("Invalid Job ID: %v", err)
+		httputil.RespondWithError(w, http.StatusBadRequest, "Invalid Job ID")
+		return
+	}
+
+	job, err := h.queries.GetJob(r.Context(), database.GetJobParams{
+		ID:     jobIdPgUUID,
+		UserID: pgUUID,
+	})
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			log.Printf("Job not found: %v", err)
+			httputil.RespondWithError(w, http.StatusNotFound, "Job not found")
+			return
+		}
+
+		log.Printf("failed to get job: %v", err)
+		httputil.RespondWithError(w, http.StatusInternalServerError, "Failed to get job")
+		return
+	}
+
+	if isActiveJobStatus(job.Status) {
+		log.Printf("Job is running at the moment")
+		httputil.RespondWithError(w, http.StatusConflict, "Job is running")
+		return
+	}
+
+	affectedRows, err := h.queries.DeleteJob(r.Context(), database.DeleteJobParams{
+		ID:     jobIdPgUUID,
+		UserID: pgUUID,
+	})
+
+	if err != nil {
+		log.Printf("failed to delete job: %v", err)
+		httputil.RespondWithError(w, http.StatusInternalServerError, "Failed to delete job")
+		return
+	}
+
+	if affectedRows == 0 {
+		httputil.RespondWithError(w, http.StatusNotFound, "Job not found")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func isActiveJobStatus(status string) bool {
+	// These are statuses where the pipeline is actively working
+	// Deleting mid-flight would cause the worker goroutine to fail
+	switch status {
+	case "cloning", "parsing", "generating":
+		return true
+	default:
+		return false
+	}
 }

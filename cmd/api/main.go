@@ -53,6 +53,7 @@ func main() {
 		r.Post("/api/v1/jobs", jobsHandler.SubmitJob)
 		r.Get("/api/v1/jobs", jobsHandler.ListJobs)
 		r.Get("/api/v1/jobs/{id}", jobsHandler.GetJobById)
+		r.Delete("/api/v1/jobs/{id}", jobsHandler.RemoveJobById)
 	})
 
 	log.Printf("Serving on: http://localhost:%s/app/\n", cfg.APIPort)

@@ -14,3 +14,6 @@ LIMIT $2 OFFSET $3;
 
 -- name: CountJobsByUser :one
 SELECT COUNT(*) FROM jobs WHERE user_id = $1;
+
+-- name: DeleteJob :execrows
+DELETE FROM jobs WHERE id = $1 and user_id = $2;

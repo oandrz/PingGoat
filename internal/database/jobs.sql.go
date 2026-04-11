@@ -55,6 +55,23 @@ func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, erro
 	return i, err
 }
 
+const deleteJob = `-- name: DeleteJob :execrows
+DELETE FROM jobs WHERE id = $1 and user_id = $2
+`
+
+type DeleteJobParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteJob(ctx context.Context, arg DeleteJobParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteJob, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getJob = `-- name: GetJob :one
 SELECT id, user_id, repo_url, branch, commit_sha, status, error_message, file_count, gemini_calls_used, started_at, completed_at, created_at, updated_at FROM jobs WHERE id = $1 and user_id = $2
 `
