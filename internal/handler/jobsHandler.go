@@ -4,6 +4,7 @@ import (
 	"PingGoat/internal/database"
 	"PingGoat/internal/httputil"
 	"PingGoat/internal/middleware"
+	"PingGoat/internal/pipeline"
 	"encoding/json"
 	"errors"
 	"log"
@@ -22,6 +23,7 @@ const defaultRepoBranch = "main"
 
 type jobsHandler struct {
 	queries *database.Queries
+	jobCh   chan<- pipeline.JobMessage
 }
 
 type JobsHandler interface {
@@ -31,9 +33,10 @@ type JobsHandler interface {
 	RemoveJobById(w http.ResponseWriter, r *http.Request)
 }
 
-func NewJobsHandler(queries *database.Queries) JobsHandler {
+func NewJobsHandler(queries *database.Queries, jobCh chan<- pipeline.JobMessage) JobsHandler {
 	return &jobsHandler{
 		queries: queries,
+		jobCh:   jobCh,
 	}
 }
 
@@ -89,6 +92,16 @@ func (h *jobsHandler) SubmitJob(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httputil.RespondWithError(w, http.StatusInternalServerError, "Failed to create job")
 		return
+	}
+
+	select {
+	case h.jobCh <- pipeline.JobMessage{
+		JobID:   job.ID,
+		RepoURL: params.RepoUrl,
+		Branch:  branchName,
+	}:
+	default:
+		log.Printf("job channel full, job %s will be picked up by recovery sweep", job.ID)
 	}
 
 	httputil.RespondWithJSON(w, http.StatusAccepted, response{

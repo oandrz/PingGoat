@@ -9,10 +9,11 @@ import (
 )
 
 type Config struct {
-	DatabaseURL    string
-	JWTSecret      string
-	JWTExpiryHours int
-	APIPort        string
+	DatabaseURL     string
+	JWTSecret       string
+	JWTExpiryHours  int
+	APIPort         string
+	PipelineWorkers int
 }
 
 func Load() Config {
@@ -27,11 +28,18 @@ func Load() Config {
 		}
 	}
 
+	var pipelineWorkers int
+	if v := os.Getenv("PIPELINE_WORKERS"); v != "" {
+		if pipelined, err := strconv.Atoi(v); err == nil {
+			pipelineWorkers = pipelined
+		}
+	}
 	cfg := Config{
-		DatabaseURL:    os.Getenv("DATABASE_URL"),
-		JWTSecret:      os.Getenv("JWT_SECRET"),
-		JWTExpiryHours: jwtExpiry,
-		APIPort:        os.Getenv("API_PORT"),
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		JWTSecret:       os.Getenv("JWT_SECRET"),
+		JWTExpiryHours:  jwtExpiry,
+		APIPort:         os.Getenv("API_PORT"),
+		PipelineWorkers: pipelineWorkers,
 	}
 
 	return cfg

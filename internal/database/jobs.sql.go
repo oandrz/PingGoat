@@ -102,6 +102,45 @@ func (q *Queries) GetJob(ctx context.Context, arg GetJobParams) (Job, error) {
 	return i, err
 }
 
+const getPendingJob = `-- name: GetPendingJob :many
+SELECT id, user_id, repo_url, branch, commit_sha, status, error_message, file_count, gemini_calls_used, started_at, completed_at, created_at, updated_at FROM jobs
+WHERE status = 'pending'
+`
+
+func (q *Queries) GetPendingJob(ctx context.Context) ([]Job, error) {
+	rows, err := q.db.Query(ctx, getPendingJob)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Job{}
+	for rows.Next() {
+		var i Job
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.RepoUrl,
+			&i.Branch,
+			&i.CommitSha,
+			&i.Status,
+			&i.ErrorMessage,
+			&i.FileCount,
+			&i.GeminiCallsUsed,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listJobsByUser = `-- name: ListJobsByUser :many
 SELECT id, user_id, repo_url, branch, commit_sha, status, error_message, file_count, gemini_calls_used, started_at, completed_at, created_at, updated_at FROM jobs
 WHERE user_id = $1
