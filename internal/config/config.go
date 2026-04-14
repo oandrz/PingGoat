@@ -28,10 +28,10 @@ func Load() Config {
 		}
 	}
 
-	var pipelineWorkers int
+	pipelineWorkers := 0
 	if v := os.Getenv("PIPELINE_WORKERS"); v != "" {
-		if pipelined, err := strconv.Atoi(v); err == nil {
-			pipelineWorkers = pipelined
+		if inputPipelineWorkers, err := strconv.Atoi(v); err == nil {
+			pipelineWorkers = inputPipelineWorkers
 		}
 	}
 	cfg := Config{

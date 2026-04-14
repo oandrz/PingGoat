@@ -14,7 +14,7 @@ LIMIT $2 OFFSET $3;
 
 -- name: GetPendingJob :many
 SELECT * FROM jobs
-WHERE status = 'pending';
+WHERE status = 'queued';
 
 -- name: CountJobsByUser :one
 SELECT COUNT(*) FROM jobs WHERE user_id = $1;

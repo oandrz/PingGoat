@@ -44,17 +44,15 @@ func main() {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			pipeline.StartWorker(ctx, id, jobCh)
+			pipeline.StartWorker(id, jobCh)
 		}(i)
 	}
 
-	for i := 0; i < cfg.PipelineWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			pipeline.StartRecoverySweep(ctx, dbQueries, jobCh, 30*time.Second)
-		}()
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		pipeline.StartRecoverySweep(ctx, dbQueries, jobCh, 30*time.Second)
+	}()
 
 	authHandler := handler.NewAuthHandler(dbQueries, cfg.JWTSecret, cfg.JWTExpiryHours)
 	jobsHandler := handler.NewJobsHandler(dbQueries, jobCh)
@@ -84,7 +82,6 @@ func main() {
 	})
 
 	log.Printf("Serving on: http://localhost:%s/app/\n", cfg.APIPort)
-	//log.Fatal(http.ListenAndServe(":"+cfg.APIPort, r))
 	srv := &http.Server{Addr: ":" + cfg.APIPort, Handler: r}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -94,7 +91,8 @@ func main() {
 
 	<-ctx.Done()
 	log.Println("Shutting down...")
-	srv.Shutdown(context.Background())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	srv.Shutdown(shutdownCtx)
 	close(jobCh)
 	wg.Wait()
 	log.Println("Shutdown complete")

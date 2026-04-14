@@ -104,7 +104,7 @@ func (q *Queries) GetJob(ctx context.Context, arg GetJobParams) (Job, error) {
 
 const getPendingJob = `-- name: GetPendingJob :many
 SELECT id, user_id, repo_url, branch, commit_sha, status, error_message, file_count, gemini_calls_used, started_at, completed_at, created_at, updated_at FROM jobs
-WHERE status = 'pending'
+WHERE status = 'queued'
 `
 
 func (q *Queries) GetPendingJob(ctx context.Context) ([]Job, error) {
