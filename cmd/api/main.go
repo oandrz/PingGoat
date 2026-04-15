@@ -38,20 +38,20 @@ func main() {
 	jobCh := make(chan pipeline.JobMessage, cfg.PipelineWorkers)
 
 	var wg sync.WaitGroup
-	ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	workerContext, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	for i := 0; i < cfg.PipelineWorkers; i++ {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			pipeline.StartWorker(ctx, dbQueries, id, jobCh)
+			pipeline.StartWorker(workerContext, dbQueries, id, jobCh)
 		}(i)
 	}
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		pipeline.StartRecoverySweep(ctx, dbQueries, jobCh, 30*time.Second)
+		pipeline.StartRecoverySweep(workerContext, dbQueries, jobCh, 30*time.Second)
 	}()
 
 	authHandler := handler.NewAuthHandler(dbQueries, cfg.JWTSecret, cfg.JWTExpiryHours)
@@ -89,7 +89,7 @@ func main() {
 		}
 	}()
 
-	<-ctx.Done()
+	<-workerContext.Done()
 	log.Println("Shutting down...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -105,6 +105,8 @@ func (q *Queries) GetJob(ctx context.Context, arg GetJobParams) (Job, error) {
 const getPendingJob = `-- name: GetPendingJob :many
 SELECT id, user_id, repo_url, branch, commit_sha, status, error_message, file_count, gemini_calls_used, started_at, completed_at, created_at, updated_at FROM jobs
 WHERE status = 'queued'
+ORDER BY created_at ASC
+LIMIT 50
 `
 
 func (q *Queries) GetPendingJob(ctx context.Context) ([]Job, error) {
@@ -189,7 +191,7 @@ func (q *Queries) ListJobsByUser(ctx context.Context, arg ListJobsByUserParams) 
 }
 
 const updateJob = `-- name: UpdateJob :execrows
-UPDATE jobs SET status = $1, updated_at = now() WHERE id = $2 and user_id = $3
+UPDATE jobs SET status = $1, updated_at = now() WHERE id = $2 and user_id = $3 and status = 'queued'
 `
 
 type UpdateJobParams struct {

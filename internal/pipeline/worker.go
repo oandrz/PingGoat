@@ -14,7 +14,7 @@ func StartWorker(
 	for msg := range jobs {
 		log.Printf("worker %d processing job: %v", id, msg)
 		// pipeline execution
-		affectedRows, err := queries.UpdateJob(ctx, database.UpdateJobParams{
+		affectedRows, err := queries.UpdateJob(context.Background(), database.UpdateJobParams{
 			Status: string(StatusCloning),
 			ID:     msg.JobID,
 			UserID: msg.UserId,
