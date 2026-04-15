@@ -14,10 +14,14 @@ LIMIT $2 OFFSET $3;
 
 -- name: GetPendingJob :many
 SELECT * FROM jobs
-WHERE status = 'queued';
+WHERE status = 'queued'
+LIMIT 50 ORDER BY created_at ASC ;
 
 -- name: CountJobsByUser :one
 SELECT COUNT(*) FROM jobs WHERE user_id = $1;
 
 -- name: DeleteJob :execrows
 DELETE FROM jobs WHERE id = $1 and user_id = $2;
+
+-- name: UpdateJob :execrows
+UPDATE jobs SET status = $1, updated_at = now() WHERE id = $2 and user_id = $3;

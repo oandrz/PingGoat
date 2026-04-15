@@ -187,3 +187,21 @@ func (q *Queries) ListJobsByUser(ctx context.Context, arg ListJobsByUserParams) 
 	}
 	return items, nil
 }
+
+const updateJob = `-- name: UpdateJob :execrows
+UPDATE jobs SET status = $1, updated_at = now() WHERE id = $2 and user_id = $3
+`
+
+type UpdateJobParams struct {
+	Status string      `json:"status"`
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) UpdateJob(ctx context.Context, arg UpdateJobParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateJob, arg.Status, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

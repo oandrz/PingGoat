@@ -24,10 +24,11 @@ func StartRecoverySweep(
 			pendingJobs, err := queries.GetPendingJob(ctx)
 			if err != nil {
 				log.Printf("Error getting pending jobs: %v", err)
+				continue
 			}
 
 			for _, job := range pendingJobs {
-				branch := "main"
+				branch := ""
 				if job.Branch.Valid {
 					branch = job.Branch.String
 				}
@@ -36,6 +37,7 @@ func StartRecoverySweep(
 					JobID:   job.ID,
 					RepoURL: job.RepoUrl,
 					Branch:  branch,
+					UserId:  job.UserID,
 				}:
 				default:
 					log.Printf("Job channel full, job %s will be picked up by recovery sweep", job.ID)

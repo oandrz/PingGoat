@@ -6,4 +6,5 @@ type JobMessage struct {
 	JobID   pgtype.UUID
 	RepoURL string
 	Branch  string
+	UserId  pgtype.UUID
 }

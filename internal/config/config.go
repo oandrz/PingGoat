@@ -28,10 +28,10 @@ func Load() Config {
 		}
 	}
 
-	pipelineWorkers := 0
+	pipelineWorkers := 2
 	if v := os.Getenv("PIPELINE_WORKERS"); v != "" {
 		if inputPipelineWorkers, err := strconv.Atoi(v); err == nil {
-			pipelineWorkers = inputPipelineWorkers
+			pipelineWorkers = max(1, inputPipelineWorkers)
 		}
 	}
 	cfg := Config{

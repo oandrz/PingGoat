@@ -99,6 +99,7 @@ func (h *jobsHandler) SubmitJob(w http.ResponseWriter, r *http.Request) {
 		JobID:   job.ID,
 		RepoURL: params.RepoUrl,
 		Branch:  branchName,
+		UserId:  pgUUID,
 	}:
 	default:
 		log.Printf("job channel full, job %s will be picked up by recovery sweep", job.ID)
@@ -313,7 +314,7 @@ func (h *jobsHandler) RemoveJobById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isActiveJobStatus(job.Status) {
+	if pipeline.JobStatus(job.Status).IsActive() {
 		log.Printf("Job is running at the moment")
 		httputil.RespondWithError(w, http.StatusConflict, "Job is running")
 		return
@@ -336,15 +337,4 @@ func (h *jobsHandler) RemoveJobById(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func isActiveJobStatus(status string) bool {
-	// These are statuses where the pipeline is actively working
-	// Deleting mid-flight would cause the worker goroutine to fail
-	switch status {
-	case "cloning", "parsing", "generating":
-		return true
-	default:
-		return false
-	}
 }

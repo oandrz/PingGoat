@@ -44,7 +44,7 @@ func main() {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			pipeline.StartWorker(id, jobCh)
+			pipeline.StartWorker(ctx, dbQueries, id, jobCh)
 		}(i)
 	}
 
@@ -92,6 +92,7 @@ func main() {
 	<-ctx.Done()
 	log.Println("Shutting down...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	srv.Shutdown(shutdownCtx)
 	close(jobCh)
 	wg.Wait()
