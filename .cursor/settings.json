@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "superpowers": {
+      "enabled": true
+    },
+    "cli-for-agent": {
+      "enabled": true
+    }
+  }
+}

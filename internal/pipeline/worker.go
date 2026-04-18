@@ -14,6 +14,7 @@ func StartWorker(
 	for msg := range jobs {
 		log.Printf("worker %d processing job: %v", id, msg)
 		// pipeline execution
+
 		affectedRows, err := queries.UpdateJob(context.Background(), database.UpdateJobParams{
 			Status: string(StatusCloning),
 			ID:     msg.JobID,
@@ -27,6 +28,16 @@ func StartWorker(
 			log.Printf("failed to update job status: job not found")
 			continue
 		}
+
+		ws, err := Clone(ctx, CloneOptions{
+			RepoURL: msg.RepoURL,
+			Branch:  msg.Branch,
+		})
+		if err != nil {
+			log.Printf("failed to clone repository: %v", err)
+			continue
+		}
+		defer ws.Cleanup()
 	}
 	log.Printf("worker %d: channel closed, exiting", id)
 }
