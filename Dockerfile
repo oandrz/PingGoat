@@ -19,6 +19,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o pinggoat ./cmd/api
 # Stage 2: Run (tiny image, just the binary)
 FROM alpine:3.21
 
+RUN apk add --no-cache git
+
 WORKDIR /app
 
 # Copy ONLY the built binary from stage 1
