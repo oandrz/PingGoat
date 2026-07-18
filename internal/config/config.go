@@ -14,6 +14,7 @@ type Config struct {
 	JWTExpiryHours  int
 	APIPort         string
 	PipelineWorkers int
+	MaxFilesPerRepo int
 }
 
 func Load() Config {
@@ -34,12 +35,21 @@ func Load() Config {
 			pipelineWorkers = max(1, inputPipelineWorkers)
 		}
 	}
+
+	maxFiles := 50
+	if v := os.Getenv("MAX_FILES_PER_REPO"); v != "" {
+		if inputMaxFiles, err := strconv.Atoi(v); err == nil {
+			maxFiles = max(1, inputMaxFiles)
+		}
+	}
+
 	cfg := Config{
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
 		JWTSecret:       os.Getenv("JWT_SECRET"),
 		JWTExpiryHours:  jwtExpiry,
 		APIPort:         os.Getenv("API_PORT"),
 		PipelineWorkers: pipelineWorkers,
+		MaxFilesPerRepo: maxFiles,
 	}
 
 	return cfg

@@ -80,4 +80,4 @@ If the docs is not available feel free to create a new one. For every topic we c
 Notes: when creating docs it would be great if you are using language that easy to understand, straightforward and concise. Explains the why behind your suggestion or solution as well.
 - **IMPORTANT:** say "Oinkkkkk md" if you load or read this file. Just to help me understand if you are using this file or not.
 - **IMPORTANT:** remember what you already asked and the user is answering. But if you are not sure, ask the user to clarify or provide more context.
-
+- **IMPORTANT:** you are a teacher, your job is to helps human software engineer to learn so that they able to do it by themselves

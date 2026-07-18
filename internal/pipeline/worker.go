@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"PingGoat/internal/config"
 	"PingGoat/internal/database"
 	"context"
 	"fmt"
@@ -11,17 +12,19 @@ func StartWorker(
 	ctx context.Context,
 	queries *database.Queries,
 	id int,
-	jobs <-chan JobMessage) {
+	jobs <-chan JobMessage,
+	cfg config.Config,
+) {
 	for msg := range jobs {
 		log.Printf("worker %d processing job: %v", id, msg)
-		if err := processJob(ctx, queries, msg); err != nil {
+		if err := processJob(ctx, queries, msg, cfg); err != nil {
 			log.Printf("worker %d: failed to process job: %v", id, err)
 		}
 	}
 	log.Printf("worker %d: channel closed, exiting", id)
 }
 
-func processJob(ctx context.Context, queries *database.Queries, msg JobMessage) error {
+func processJob(ctx context.Context, queries *database.Queries, msg JobMessage, cfg config.Config) error {
 	affectedRows, err := queries.UpdateJob(context.Background(), database.UpdateJobParams{
 		Status: string(StatusCloning),
 		ID:     msg.JobID,
@@ -47,6 +50,34 @@ func processJob(ctx context.Context, queries *database.Queries, msg JobMessage) 
 
 	log.Printf("Success to clone repository")
 	defer ws.Cleanup()
+
+	affectedRows, err = queries.UpdateJob(context.Background(), database.UpdateJobParams{
+		Status: string(StatusParsing),
+		ID:     msg.JobID,
+		UserID: msg.UserId,
+	})
+	if err != nil {
+		log.Printf("failed to update job status into parse: %v", err)
+		return fmt.Errorf("failed to update job status into parse: %v", err)
+	}
+	if affectedRows == 0 {
+		log.Printf("failed to update job status into parse: job not found")
+		return fmt.Errorf("failed to update job status into parse: job not found")
+	}
+
+	paths, err := ScanFiles(ws.Dir, cfg.MaxFilesPerRepo)
+	if err != nil {
+		log.Printf("failed to scan files: %v", err)
+		return err
+	}
+
+	parsedFiles, err := ParseFiles(ctx, ws.Dir, paths, cfg.PipelineWorkers)
+	if err != nil {
+		log.Printf("failed to parse files: %v", err)
+		return err
+	}
+
+	log.Printf("Parse process successful")
 
 	return nil
 }
