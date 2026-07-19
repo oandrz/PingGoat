@@ -3,6 +3,7 @@ package pipeline
 import (
 	"PingGoat/internal/config"
 	"PingGoat/internal/database"
+	"PingGoat/internal/gemini"
 	"context"
 	"fmt"
 	"log"
@@ -86,6 +87,43 @@ func processJob(ctx context.Context, queries *database.Queries, msg JobMessage, 
 	}
 
 	log.Printf("packed %d files into %d batches", len(parsedFiles), len(batches))
+
+	var gen gemini.Generator
+	if cfg.GeminiAPIKey != "" {
+		limiter := gemini.NewRateLimiter(cfg.GeminiRPM)
+		defer limiter.Stop()
+		gen, err = gemini.NewAdkGenerator(ctx, cfg.GeminiAPIKey, cfg.GeminiModel, limiter)
+		if err != nil {
+			return err
+		}
+	}
+
+	affectedRows, err = queries.UpdateJob(context.Background(), database.UpdateJobParams{
+		Status: string(StatusGenerating),
+		ID:     msg.JobID,
+		UserID: msg.UserId,
+	})
+	if err != nil {
+		log.Printf("failed to update job status into generating: %v", err)
+		return fmt.Errorf("failed to update job status into generating: %v", err)
+	}
+	if affectedRows == 0 {
+		log.Printf("failed to update job status into generating: job not found")
+		return fmt.Errorf("failed to update job status into generating: job not found")
+	}
+
+	docTypes := []gemini.DocType{gemini.DocReadme, gemini.DocQuickStart, gemini.DocDiagram}
+	var docs []gemini.GenResult
+	for _, dt := range docTypes {
+		req := gemini.BuildPrompt(parsedFiles, dt)
+		res, genErr := gen.Generate(ctx, req)
+		if genErr != nil {
+			log.Printf("generate %s failed: %v", dt, genErr)
+			continue // independent docs: one failure doesn't kill the job
+		}
+		docs = append(docs, res)
+	}
+	log.Printf("generated %d/%d docs", len(docs), len(docTypes))
 
 	return nil
 }

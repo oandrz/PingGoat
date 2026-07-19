@@ -16,6 +16,9 @@ type Config struct {
 	PipelineWorkers   int
 	MaxFilesPerRepo   int
 	MaxTokensPerBatch int
+	GeminiAPIKey      string
+	GeminiModel       string
+	GeminiRPM         int
 }
 
 func Load() Config {
@@ -51,6 +54,20 @@ func Load() Config {
 		}
 	}
 
+	GeminiAPIKey := os.Getenv("GEMINI_API_KEY")
+
+	GeminiModel := "gemini-2.5-flash"
+	if v := os.Getenv("GEMINI_MODEL"); v != "" {
+		GeminiModel = v
+	}
+
+	GeminiRPM := 10
+	if v := os.Getenv("GEMINI_RPM_LIMIT"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			GeminiRPM = max(1, parsed)
+		}
+	}
+
 	cfg := Config{
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		JWTSecret:         os.Getenv("JWT_SECRET"),
@@ -59,6 +76,9 @@ func Load() Config {
 		PipelineWorkers:   pipelineWorkers,
 		MaxFilesPerRepo:   maxFiles,
 		MaxTokensPerBatch: maxTokensPerBatch,
+		GeminiAPIKey:      GeminiAPIKey,
+		GeminiModel:       GeminiModel,
+		GeminiRPM:         GeminiRPM,
 	}
 
 	return cfg
