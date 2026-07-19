@@ -79,5 +79,13 @@ func processJob(ctx context.Context, queries *database.Queries, msg JobMessage, 
 
 	log.Printf("Parse process successful")
 
+	batches := BatchFiles(parsedFiles, cfg.MaxTokensPerBatch)
+	if len(batches) == 0 {
+		log.Printf("no parseable files in repo")
+		return fmt.Errorf("no parseable files in repo")
+	}
+
+	log.Printf("packed %d files into %d batches", len(parsedFiles), len(batches))
+
 	return nil
 }

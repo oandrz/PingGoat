@@ -9,12 +9,13 @@ import (
 )
 
 type Config struct {
-	DatabaseURL     string
-	JWTSecret       string
-	JWTExpiryHours  int
-	APIPort         string
-	PipelineWorkers int
-	MaxFilesPerRepo int
+	DatabaseURL       string
+	JWTSecret         string
+	JWTExpiryHours    int
+	APIPort           string
+	PipelineWorkers   int
+	MaxFilesPerRepo   int
+	MaxTokensPerBatch int
 }
 
 func Load() Config {
@@ -43,13 +44,21 @@ func Load() Config {
 		}
 	}
 
+	maxTokensPerBatch := 50000
+	if v := os.Getenv("PIPELINE_MAX_TOKENS_PER_BATCH"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			maxTokensPerBatch = max(1, parsed)
+		}
+	}
+
 	cfg := Config{
-		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		JWTSecret:       os.Getenv("JWT_SECRET"),
-		JWTExpiryHours:  jwtExpiry,
-		APIPort:         os.Getenv("API_PORT"),
-		PipelineWorkers: pipelineWorkers,
-		MaxFilesPerRepo: maxFiles,
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		JWTSecret:         os.Getenv("JWT_SECRET"),
+		JWTExpiryHours:    jwtExpiry,
+		APIPort:           os.Getenv("API_PORT"),
+		PipelineWorkers:   pipelineWorkers,
+		MaxFilesPerRepo:   maxFiles,
+		MaxTokensPerBatch: maxTokensPerBatch,
 	}
 
 	return cfg
