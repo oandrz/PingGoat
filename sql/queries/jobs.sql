@@ -26,3 +26,17 @@ DELETE FROM jobs WHERE id = $1 and user_id = $2;
 
 -- name: UpdateJob :execrows
 UPDATE jobs SET status = $1, updated_at = now() WHERE id = $2 and user_id = $3 and status = 'queued';
+
+-- name: SetJobStatus :execrows
+UPDATE jobs SET status = $1, updated_at = now()
+WHERE id = $2 and user_id = $3;
+
+-- name: CompleteJob :execrows
+UPDATE jobs
+SET status            = 'completed',
+    commit_sha        = $1,
+    file_count        = $2,
+    gemini_calls_used = $3,
+    completed_at      = now(),
+    updated_at        = now()
+WHERE id = $4 AND user_id = $5;

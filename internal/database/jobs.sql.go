@@ -11,6 +11,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const completeJob = `-- name: CompleteJob :execrows
+UPDATE jobs
+SET status            = 'completed',
+    commit_sha        = $1,
+    file_count        = $2,
+    gemini_calls_used = $3,
+    completed_at      = now(),
+    updated_at        = now()
+WHERE id = $4 AND user_id = $5
+`
+
+type CompleteJobParams struct {
+	CommitSha       pgtype.Text `json:"commit_sha"`
+	FileCount       pgtype.Int4 `json:"file_count"`
+	GeminiCallsUsed pgtype.Int4 `json:"gemini_calls_used"`
+	ID              pgtype.UUID `json:"id"`
+	UserID          pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) CompleteJob(ctx context.Context, arg CompleteJobParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeJob,
+		arg.CommitSha,
+		arg.FileCount,
+		arg.GeminiCallsUsed,
+		arg.ID,
+		arg.UserID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countJobsByUser = `-- name: CountJobsByUser :one
 SELECT COUNT(*) FROM jobs WHERE user_id = $1
 `
@@ -188,6 +221,25 @@ func (q *Queries) ListJobsByUser(ctx context.Context, arg ListJobsByUserParams) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const setJobStatus = `-- name: SetJobStatus :execrows
+UPDATE jobs SET status = $1, updated_at = now()
+WHERE id = $2 and user_id = $3
+`
+
+type SetJobStatusParams struct {
+	Status string      `json:"status"`
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) SetJobStatus(ctx context.Context, arg SetJobStatusParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setJobStatus, arg.Status, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateJob = `-- name: UpdateJob :execrows

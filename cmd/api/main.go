@@ -44,7 +44,7 @@ func main() {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			pipeline.StartWorker(workerContext, dbQueries, id, jobCh, cfg)
+			pipeline.StartWorker(workerContext, pool, dbQueries, id, jobCh, cfg)
 		}(i)
 	}
 

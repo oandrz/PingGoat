@@ -7,10 +7,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func StartWorker(
 	ctx context.Context,
+	pool *pgxpool.Pool,
 	queries *database.Queries,
 	id int,
 	jobs <-chan JobMessage,
@@ -18,14 +21,14 @@ func StartWorker(
 ) {
 	for msg := range jobs {
 		log.Printf("worker %d processing job: %v", id, msg)
-		if err := processJob(ctx, queries, msg, cfg); err != nil {
+		if err := processJob(ctx, pool, queries, msg, cfg); err != nil {
 			log.Printf("worker %d: failed to process job: %v", id, err)
 		}
 	}
 	log.Printf("worker %d: channel closed, exiting", id)
 }
 
-func processJob(ctx context.Context, queries *database.Queries, msg JobMessage, cfg config.Config) error {
+func processJob(ctx context.Context, pool *pgxpool.Pool, queries *database.Queries, msg JobMessage, cfg config.Config) error {
 	affectedRows, err := queries.UpdateJob(context.Background(), database.UpdateJobParams{
 		Status: string(StatusCloning),
 		ID:     msg.JobID,
@@ -52,7 +55,7 @@ func processJob(ctx context.Context, queries *database.Queries, msg JobMessage, 
 	log.Printf("Success to clone repository")
 	defer ws.Cleanup()
 
-	affectedRows, err = queries.UpdateJob(context.Background(), database.UpdateJobParams{
+	affectedRows, err = queries.SetJobStatus(context.Background(), database.SetJobStatusParams{
 		Status: string(StatusParsing),
 		ID:     msg.JobID,
 		UserID: msg.UserId,
@@ -98,7 +101,7 @@ func processJob(ctx context.Context, queries *database.Queries, msg JobMessage, 
 		}
 	}
 
-	affectedRows, err = queries.UpdateJob(context.Background(), database.UpdateJobParams{
+	affectedRows, err = queries.SetJobStatus(context.Background(), database.SetJobStatusParams{
 		Status: string(StatusGenerating),
 		ID:     msg.JobID,
 		UserID: msg.UserId,
@@ -113,17 +116,36 @@ func processJob(ctx context.Context, queries *database.Queries, msg JobMessage, 
 	}
 
 	docTypes := []gemini.DocType{gemini.DocReadme, gemini.DocQuickStart, gemini.DocDiagram}
-	var docs []gemini.GenResult
+	var docs []StoredDoc
 	for _, dt := range docTypes {
-		req := gemini.BuildPrompt(parsedFiles, dt)
+		req := BuildPrompt(parsedFiles, dt)
 		res, genErr := gen.Generate(ctx, req)
 		if genErr != nil {
 			log.Printf("generate %s failed: %v", dt, genErr)
 			continue // independent docs: one failure doesn't kill the job
 		}
-		docs = append(docs, res)
+		docs = append(docs, StoredDoc{DocType: dt, Result: res})
 	}
 	log.Printf("generated %d/%d docs", len(docs), len(docTypes))
+
+	if len(docs) == 0 {
+		return fmt.Errorf("all doc generation failed, nothing to store")
+	}
+
+	// Stage 5: Store. Persist docs + cache + mark job completed, atomically.
+	if err := StoreResults(ctx, pool, queries, StoreInput{
+		JobID:           msg.JobID,
+		UserID:          msg.UserId,
+		RepoURL:         msg.RepoURL,
+		CommitSHA:       ws.CommitSHA,
+		FileCount:       int32(len(parsedFiles)),
+		GeminiCallsUsed: int32(len(docs)),
+		Docs:            docs,
+	}); err != nil {
+		log.Printf("failed to store results: %v", err)
+		return err
+	}
+	log.Printf("stored %d docs, job %v completed", len(docs), msg.JobID)
 
 	return nil
 }

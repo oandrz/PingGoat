@@ -56,7 +56,7 @@ func Load() Config {
 
 	GeminiAPIKey := os.Getenv("GEMINI_API_KEY")
 
-	GeminiModel := "gemini-2.5-flash"
+	GeminiModel := "gemini-3.1-flash-lite"
 	if v := os.Getenv("GEMINI_MODEL"); v != "" {
 		GeminiModel = v
 	}

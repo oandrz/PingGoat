@@ -1,13 +1,13 @@
-package gemini
+package pipeline
 
 import (
-	"PingGoat/internal/pipeline"
+	"PingGoat/internal/gemini"
 	"path/filepath"
 	"strings"
 )
 
-func selectFiles(files []pipeline.ParsedFile, doc DocType) []pipeline.ParsedFile {
-	var out []pipeline.ParsedFile
+func selectFiles(files []ParsedFile, doc gemini.DocType) []ParsedFile {
+	var out []ParsedFile
 
 	for _, file := range files {
 		if matches(file, doc) {
@@ -18,43 +18,43 @@ func selectFiles(files []pipeline.ParsedFile, doc DocType) []pipeline.ParsedFile
 	return out
 }
 
-func matches(p pipeline.ParsedFile, doc DocType) bool {
+func matches(p ParsedFile, doc gemini.DocType) bool {
 	switch doc {
-	case DocReadme:
+	case gemini.DocReadme:
 		base := filepath.Base(p.Path)
 		return base == "go.mod" ||
 			base == "package.json" ||
 			base == "main.go" ||
 			strings.HasPrefix(strings.ToLower(base), "readme") ||
 			base == "Dockerfile" || base == "Makefile"
-	case DocQuickStart:
+	case gemini.DocQuickStart:
 		return strings.Contains(p.Path, "handler") || strings.Contains(p.Path, "route") ||
 			strings.Contains(p.Path, "model") || strings.Contains(p.Path, "domain")
-	case DocDiagram:
+	case gemini.DocDiagram:
 		return strings.HasSuffix(p.Path, ".go") || strings.HasSuffix(p.Path, ".ts")
 	}
 
 	return false
 }
 
-func BuildPrompt(files []pipeline.ParsedFile, doc DocType) GenRequest {
+func BuildPrompt(files []ParsedFile, doc gemini.DocType) gemini.GenRequest {
 	selected := selectFiles(files, doc)
 
 	var b strings.Builder
 
 	switch doc {
-	case DocReadme:
+	case gemini.DocReadme:
 		b.WriteString("You are a technical writer. Generate a professional README.md.\n")
 		b.WriteString("Include: title, features, tech stack, installation, project structure.\n")
 		b.WriteString("Output only Markdown.\n")
-	case DocQuickStart:
-		b.WriteString("You are a technical writer. Generate a quickstart.md document.\n")
-		b.WriteString("Include: steps to run the project or app\n")
+	case gemini.DocQuickStart:
+		b.WriteString("You are a developer advocate. Generate a quickstart.md document.\n")
+		b.WriteString("Include: prerequisites, steps to run the project or app, working code example, common first task, troubleshooting tips\n")
 		b.WriteString("Output only Markdown.\n")
-	case DocDiagram:
-		b.WriteString("You are a technical writer. Generate a architecture diagram.\n")
-		b.WriteString("Include: architecture diagram written using mermaid js on markdown file\n")
-		b.WriteString("Output only Markdown.\n")
+	case gemini.DocDiagram:
+		b.WriteString("You are a software architect. Generate a architecture diagram.\n")
+		b.WriteString("Include: architecture diagram written using mermaid js on markdown file that shows main component/modules and responsibilities, data flow between components, external dependencies, entry point\n")
+		b.WriteString("Output only Markdown. use graph TD or flowchart TD of mermaid\n")
 	}
 
 	for _, file := range selected {
@@ -63,7 +63,7 @@ func BuildPrompt(files []pipeline.ParsedFile, doc DocType) GenRequest {
 		b.WriteString("\n")
 		// Diagram only needs structure (names + imports), not full source —
 		// dumping every file body would blow the token budget.
-		if doc == DocDiagram {
+		if doc == gemini.DocDiagram {
 			b.WriteString(extractImports(file.Content))
 		} else {
 			b.WriteString(file.Content)
@@ -71,7 +71,7 @@ func BuildPrompt(files []pipeline.ParsedFile, doc DocType) GenRequest {
 		b.WriteString("\n\n")
 	}
 
-	return GenRequest{DocType: doc, Prompt: b.String()}
+	return gemini.GenRequest{DocType: doc, Prompt: b.String()}
 }
 
 // extractImports returns only the import lines of a Go source file, one per line.
